@@ -7,14 +7,19 @@ app = FastAPI()
 DRIVE_ENDPOINT_URL = "https://drive.google.com/uc?export=download&id=1tKH95snEwYts-TiuRJWdxbEHTleunsaO"
 
 def get_current_endpoint():
-    """Lê o link do túnel Cloudflare salvo no Google Drive."""
     try:
-        response = httpx.get(DRIVE_ENDPOINT_URL, timeout=10)
-        if response.status_code == 200:
-            return response.text.strip()
+        resp = httpx.get(DRIVE_ENDPOINT_URL, timeout=10)
+        # Google Drive pode retornar HTML — extraímos o conteúdo entre <pre>...</pre> ou linhas simples de texto
+        if resp.status_code == 200:
+            # Remove tags HTML, se houver
+            text = re.sub(r"<[^>]*>", "", resp.text).strip()
+            # Valida se parece um endpoint .trycloudflare.com
+            if "trycloudflare.com" in text:
+                return text
+        return None
     except Exception as e:
         print(f"Erro ao buscar endpoint: {e}")
-    return None
+        return None
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
