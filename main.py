@@ -8,18 +8,28 @@ DRIVE_ENDPOINT_URL = "https://drive.google.com/uc?export=download&id=1tKH95snEwY
 
 def get_current_endpoint():
     try:
-        resp = httpx.get(DRIVE_ENDPOINT_URL, timeout=10)
-        # Google Drive pode retornar HTML — extraímos o conteúdo entre <pre>...</pre> ou linhas simples de texto
+        # 1️⃣ tenta seguir redirecionamentos automáticos (Drive faz isso)
+        with httpx.Client(follow_redirects=True, timeout=10) as client:
+            resp = client.get(DRIVE_ENDPOINT_URL)
+
         if resp.status_code == 200:
-            # Remove tags HTML, se houver
+            # 2️⃣ remove tags HTML (Drive pode embutir o texto em <pre> ou <html>)
             text = re.sub(r"<[^>]*>", "", resp.text).strip()
-            # Valida se parece um endpoint .trycloudflare.com
+
+            # 3️⃣ tenta detectar se há um link válido de tunnel
             if "trycloudflare.com" in text:
                 return text
-        return None
+            else:
+                print(f"Conteúdo inesperado: {text[:100]}...")
+                return None
+        else:
+            print(f"Status HTTP inesperado: {resp.status_code}")
+            return None
+
     except Exception as e:
         print(f"Erro ao buscar endpoint: {e}")
         return None
+
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
