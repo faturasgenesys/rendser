@@ -1,13 +1,18 @@
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
 import httpx
 import re
 
-app = FastAPI()
+app = FastAPI(title="MyObsidian Proxy", version="1.0.0")
 
 # 🔗 Link direto para o arquivo endpoint_atual.txt no Google Drive
 DRIVE_ENDPOINT_URL = "https://drive.google.com/uc?export=download&id=1tKH95snEwYts-TiuRJWdxbEHTleunsaO"
 
+
 def get_current_endpoint():
+    """
+    Faz o download do arquivo endpoint_atual.txt no Google Drive,
+    limpa caracteres invisíveis e retorna o link do túnel Cloudflare.
+    """
     try:
         with httpx.Client(follow_redirects=True, timeout=10) as client:
             resp = client.get(DRIVE_ENDPOINT_URL)
@@ -16,15 +21,14 @@ def get_current_endpoint():
             print(f"⚠️ HTTP {resp.status_code} ao acessar o Drive.")
             return None
 
-        # 🔹 Remove tags HTML, espaços e caracteres invisíveis
+        # 🔹 Remove tags HTML e caracteres não visíveis
         text = re.sub(r"<[^>]*>", "", resp.text)
-        clean_text = text.encode('ascii', 'ignore').decode().strip()
-
-        # 🔹 Corrige possíveis \r\n, BOM, espaços extras
+        clean_text = text.encode("ascii", "ignore").decode().strip()
         clean_text = clean_text.replace("\r", "").replace("\n", "").replace("\ufeff", "").strip()
 
-        # 🔹 Log para depuração
-        print(f"🧾 Conteúdo final processado: '{clean_text}'")
+        # 🔹 Log detalhado
+        print(f"🧾 Conteúdo bruto recebido do Drive: {text[:80]}...")
+        print(f"🧹 Conteúdo final processado: '{clean_text}'")
 
         if clean_text.startswith("http"):
             print(f"✅ Endpoint válido detectado: {clean_text}")
@@ -38,37 +42,31 @@ def get_current_endpoint():
         return None
 
 
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def proxy(request: Request, path: str):
-    base_url = get_current_endpoint()
-    if not base_url:
-        return {"erro": "Arquivo endpoint_atual.txt não encontrado ou inacessível"}
-
-    target_url = f"{base_url}/{path}"
-    method = request.method
-    headers = dict(request.headers)
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.request(
-            method,
-            target_url,
-            headers=headers,
-            content=await request.body(),
-            timeout=60.0,
-        )
-
-    return Response(
-        content=resp.content,
-        status_code=resp.status_code,
-        headers=dict(resp.headers),
-        media_type=resp.headers.get("content-type")
-    )
-
-
 @app.get("/")
 def status():
+    """
+    Retorna o status do proxy e o último endpoint válido do Drive.
+    (Não tenta se conectar ao túnel — apenas lê e repassa o link.)
+    """
     base_url = get_current_endpoint()
     return {
         "proxy_status": "ativo 🚀",
-        "tunnel_destino": base_url or "não definido"
+        "tunnel_destino": base_url or "não definido (Drive acessível, túnel externo não testado)"
     }
+
+
+@app.get("/debug")
+def debug():
+    """
+    Endpoint auxiliar para depuração.
+    Exibe os primeiros 100 caracteres retornados pelo arquivo no Drive.
+    """
+    try:
+        with httpx.Client(follow_redirects=True, timeout=10) as client:
+            resp = client.get(DRIVE_ENDPOINT_URL)
+
+        preview = re.sub(r"<[^>]*>", "", resp.text)[:200]
+        return {"preview_conteudo_drive": preview}
+
+    except Exception as e:
+        return {"erro": f"Falha ao acessar Drive: {e}"}
