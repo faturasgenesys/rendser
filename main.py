@@ -9,30 +9,29 @@ DRIVE_ENDPOINT_URL = "https://drive.google.com/uc?export=download&id=1tKH95snEwY
 
 def get_current_endpoint():
     try:
-        # ✅ Verifica se URL é válida antes de tentar conexão
-        if not DRIVE_ENDPOINT_URL.startswith("http"):
-            print(f"URL inválida: {DRIVE_ENDPOINT_URL}")
-            return None
-
+        # 1️⃣ Faz a requisição ao Drive, seguindo redirects
         with httpx.Client(follow_redirects=True, timeout=10) as client:
             resp = client.get(DRIVE_ENDPOINT_URL)
 
-        # ✅ Se o Google Drive respondeu corretamente
-        if resp.status_code == 200:
-            # Remove tags HTML e espaços
-            text = re.sub(r"<[^>]*>", "", resp.text).strip()
-            print(f"🔍 Conteúdo recebido do Drive: {text[:80]}...")
-
-            # ✅ Valida se o texto parece um endpoint Cloudflare
-            if "trycloudflare.com" in text:
-                return text
-
-            print("⚠️ O conteúdo do arquivo não contém um link válido de tunnel.")
-            return None
-
-        else:
+        if resp.status_code != 200:
             print(f"⚠️ HTTP {resp.status_code} ao acessar o Drive.")
             return None
+
+        # 2️⃣ Extrai o texto bruto e remove tags HTML, espaços e quebras de linha
+        text = re.sub(r"<[^>]*>", "", resp.text).strip()
+
+        # 3️⃣ Garante que o texto comece com https://
+        if not text.startswith("http"):
+            print(f"⚠️ Conteúdo inválido no arquivo: {text[:80]}")
+            return None
+
+        # 4️⃣ Remove caracteres invisíveis e quebras de linha
+        clean_text = text.replace("\r", "").replace("\n", "").strip()
+
+        # 5️⃣ Log para depuração
+        print(f"✅ Endpoint ativo detectado: {clean_text}")
+
+        return clean_text
 
     except Exception as e:
         print(f"❌ Erro ao buscar endpoint: {e}")
