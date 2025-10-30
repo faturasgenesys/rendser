@@ -9,7 +9,6 @@ DRIVE_ENDPOINT_URL = "https://drive.google.com/uc?export=download&id=1tKH95snEwY
 
 def get_current_endpoint():
     try:
-        # 1️⃣ Faz a requisição ao Drive, seguindo redirects
         with httpx.Client(follow_redirects=True, timeout=10) as client:
             resp = client.get(DRIVE_ENDPOINT_URL)
 
@@ -17,21 +16,22 @@ def get_current_endpoint():
             print(f"⚠️ HTTP {resp.status_code} ao acessar o Drive.")
             return None
 
-        # 2️⃣ Extrai o texto bruto e remove tags HTML, espaços e quebras de linha
-        text = re.sub(r"<[^>]*>", "", resp.text).strip()
+        # 🔹 Remove tags HTML, espaços e caracteres invisíveis
+        text = re.sub(r"<[^>]*>", "", resp.text)
+        clean_text = text.encode('ascii', 'ignore').decode().strip()
 
-        # 3️⃣ Garante que o texto comece com https://
-        if not text.startswith("http"):
-            print(f"⚠️ Conteúdo inválido no arquivo: {text[:80]}")
+        # 🔹 Corrige possíveis \r\n, BOM, espaços extras
+        clean_text = clean_text.replace("\r", "").replace("\n", "").replace("\ufeff", "").strip()
+
+        # 🔹 Log para depuração
+        print(f"🧾 Conteúdo final processado: '{clean_text}'")
+
+        if clean_text.startswith("http"):
+            print(f"✅ Endpoint válido detectado: {clean_text}")
+            return clean_text
+        else:
+            print(f"⚠️ Conteúdo inválido no arquivo: {clean_text}")
             return None
-
-        # 4️⃣ Remove caracteres invisíveis e quebras de linha
-        clean_text = text.replace("\r", "").replace("\n", "").strip()
-
-        # 5️⃣ Log para depuração
-        print(f"✅ Endpoint ativo detectado: {clean_text}")
-
-        return clean_text
 
     except Exception as e:
         print(f"❌ Erro ao buscar endpoint: {e}")
